@@ -1,0 +1,16 @@
+# StreakAPI Configuration File
+# Set to true to use MySQL database instead of JSON files
+use-database: true
+
+# Database configuration (only used if use-database is true)
+database:
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: ""
+  database: "streakapi"
+
+# Default instance settings
+default-settings:
+  milestone-message: "&6{player} &ereached &c{streak} &e{instance}!"
+  reset-on-death: false

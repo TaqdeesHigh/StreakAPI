@@ -1,0 +1,43 @@
+name: StreakAPI
+main: taqdees\StreakAPI\Main
+version: 1.0.0
+api: 5.0.0
+author: Taqdees
+description: A streak tracking API for PocketMine-MP
+
+permissions:
+  streakapi.admin:
+    description: "Allows access to administrative streak commands"
+    default: op
+  streakapi.reset:
+    description: "Allows resetting player streaks"
+    default: op
+  streakapi.view:
+    description: "Allows viewing streak information"
+    default: true
+
+commands:
+  createstreak:
+    description: "Create a new streak instance"
+    usage: "/createstreak <instance_name> [display_name]"
+    permission: streakapi.admin
+  deletestreak:
+    description: "Delete a streak instance"
+    usage: "/deletestreak <instance_name>"
+    permission: streakapi.admin
+  liststreaks:
+    description: "List all streak instances"
+    usage: "/liststreaks"
+    permission: streakapi.view
+  streak:
+    description: "View streak information"
+    usage: "/streak [instance] [player]"
+    permission: streakapi.view
+  resetstreak:
+    description: "Reset a player's streak"
+    usage: "/resetstreak <instance> <player>"
+    permission: streakapi.reset
+  topstreaks:
+    description: "View top streaks for an instance"
+    usage: "/topstreaks [instance]"
+    permission: streakapi.view
