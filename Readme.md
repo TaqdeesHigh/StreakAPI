@@ -257,7 +257,7 @@ $config = [
 ## API Events
 
 ```php
-// TODO: Implement custom events in future updates
+// TODO: Custom events in future updates
 // - StreakIncrementEvent
 // - StreakResetEvent
 // - StreakMilestoneEvent
