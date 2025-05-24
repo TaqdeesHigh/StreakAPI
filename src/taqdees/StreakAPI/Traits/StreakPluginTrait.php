@@ -169,4 +169,32 @@ trait StreakPluginTrait {
     protected function sendInfo(CommandSender $sender, string $message, array $replacements = []): void {
         $sender->sendMessage(MessageFormatter::formatMessage("&e" . $message, $replacements));
     }
+    
+    /**
+     * Send success message using MessageFormatter
+     */
+    protected function sendSuccessMessage(CommandSender $sender, string $message, array $replacements = []): void {
+        $this->sendSuccess($sender, $message, $replacements);
+    }
+    
+    /**
+     * Send error message using MessageFormatter
+     */
+    protected function sendErrorMessage(CommandSender $sender, string $message, array $replacements = []): void {
+        $this->sendError($sender, $message, $replacements);
+    }
+    
+    /**
+     * Send info message using MessageFormatter
+     */
+    protected function sendInfoMessage(CommandSender $sender, string $message, array $replacements = []): void {
+        $this->sendInfo($sender, $message, $replacements);
+    }
+    
+    /**
+     * Send warning message using MessageFormatter
+     */
+    protected function sendWarningMessage(CommandSender $sender, string $message, array $replacements = []): void {
+        $sender->sendMessage(MessageFormatter::formatMessage("&6" . $message, $replacements));
+    }
 }

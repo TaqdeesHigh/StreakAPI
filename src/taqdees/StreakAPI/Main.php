@@ -395,7 +395,7 @@ class Main extends PluginBase implements Listener {
                     [$playerName, $streak, $instanceName], 
                     $command
                 );
-                $this->getServer()->dispatchCommand($this->getServer()->getConsoleSender(), $cmd);
+                $this->getServer()->dispatchCommand($this->getServer()->getCommandSender(), $cmd);
             }
         }
     }
