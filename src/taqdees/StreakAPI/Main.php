@@ -395,11 +395,11 @@ class Main extends PluginBase implements Listener {
                     [$playerName, $streak, $instanceName], 
                     $command
                 );
-                $this->getServer()->dispatchCommand($this->getServer()->getCommandSender(), $cmd);
+                $this->getServer()->dispatchCommand($this, $cmd);
             }
         }
     }
-    
+
     public function onCommand(CommandSender $sender, Command $command, string $label, array $args): bool {
         $commandName = $command->getName();
         
