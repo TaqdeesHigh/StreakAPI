@@ -41,7 +41,6 @@ class Main extends PluginBase implements Listener {
         $this->registerCommands();
         
         $storageType = $this->useDatabase ? "MySQL Database" : "JSON Files";
-        $this->getLogger()->info(TF::GREEN . "Using $storageType for storage.");
     }
     
     public function onDisable(): void {
