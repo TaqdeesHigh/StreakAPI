@@ -34,8 +34,7 @@ class ResetStreakCommand {
         if (!$this->validateInstance($instanceName, $sender)) {
             return true;
         }
-        
-        if ($this->plugin->resetStreak($instanceName, $targetName)) {
+        if ($this->plugin->resetStreak($instanceName, $targetName, "command")) {
             $this->sendSuccessMessage($sender, "Reset $instanceName streak for $targetName");
         } else {
             $this->sendErrorMessage($sender, "Failed to reset streak (player not found)");

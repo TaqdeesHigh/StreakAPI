@@ -42,8 +42,8 @@ class StreakAPI {
         return $this->plugin->setStreak(strtolower($instanceName), $playerName, $amount);
     }
     
-    public function resetStreak(string $instanceName, string $playerName): bool {
-        return $this->plugin->resetStreak(strtolower($instanceName), $playerName);
+    public function resetStreak(string $instanceName, string $playerName, string $reason = "api"): bool {
+        return $this->plugin->resetStreak(strtolower($instanceName), $playerName, $reason);
     }
     
     public function getStreak(string $instanceName, string $playerName): int {

@@ -17,6 +17,9 @@ use taqdees\StreakAPI\Commands\ListStreaksCommand;
 use taqdees\StreakAPI\Commands\StreakCommand;
 use taqdees\StreakAPI\Commands\ResetStreakCommand;
 use taqdees\StreakAPI\Commands\TopStreaksCommand;
+use taqdees\StreakAPI\Events\StreakIncrementEvent;
+use taqdees\StreakAPI\Events\StreakResetEvent;
+use taqdees\StreakAPI\Events\StreakMilestoneEvent;
 use taqdees\StreakAPI\Utils\MessageFormatter;
 
 class Main extends PluginBase implements Listener {
@@ -262,21 +265,37 @@ class Main extends PluginBase implements Listener {
             ];
         }
         
+        $oldStreak = $this->streaks[$instanceName][$playerName]['current_streak'];
+        $player = $this->getServer()->getPlayerExact($playerName);
+        if ($player !== null) {
+            $event = new StreakIncrementEvent($this, $player, $instanceName, $oldStreak, $oldStreak + $amount, $amount);
+            $event->call();
+            
+            if ($event->isCancelled()) {
+                return false;
+            }
+            
+            $amount = $event->getIncrementAmount();
+        }
+        
         $this->streaks[$instanceName][$playerName]['current_streak'] += $amount;
         $this->streaks[$instanceName][$playerName]['total_count'] += $amount;
         $this->streaks[$instanceName][$playerName]['last_updated'] = time();
         
+        $isNewRecord = false;
         if ($this->streaks[$instanceName][$playerName]['current_streak'] > $this->streaks[$instanceName][$playerName]['highest_streak']) {
             $this->streaks[$instanceName][$playerName]['highest_streak'] = $this->streaks[$instanceName][$playerName]['current_streak'];
+            $isNewRecord = true;
         }
         
         if ($this->useDatabase && $this->databaseManager) {
             $this->databaseManager->saveStreakData($instanceName, $playerName, $this->streaks[$instanceName][$playerName]);
         }
         
-        $this->checkStreakMilestones($instanceName, $playerName);
+        $this->checkStreakMilestones($instanceName, $playerName, $isNewRecord);
         return true;
     }
+
     
     public function setStreak(string $instanceName, string $playerName, int $amount): bool {
         if (!$this->instanceExists($instanceName)) {
@@ -305,13 +324,22 @@ class Main extends PluginBase implements Listener {
         
         return true;
     }
-    
-    public function resetStreak(string $instanceName, string $playerName): bool {
+        
+    public function resetStreak(string $instanceName, string $playerName, string $reason = "manual"): bool {
         if (!$this->instanceExists($instanceName)) {
             return false;
         }
         
         if (isset($this->streaks[$instanceName][$playerName])) {
+            $oldStreak = $this->streaks[$instanceName][$playerName]['current_streak'];
+            $player = $this->getServer()->getPlayerExact($playerName);
+            $event = new StreakResetEvent($this, $player, $instanceName, $oldStreak, $reason);
+            $event->call();
+            
+            if ($event->isCancelled()) {
+                return false;
+            }
+            
             $this->streaks[$instanceName][$playerName]['current_streak'] = 0;
             $this->streaks[$instanceName][$playerName]['last_updated'] = time();
             
@@ -323,6 +351,7 @@ class Main extends PluginBase implements Listener {
         }
         return false;
     }
+
     
     public function getStreak(string $instanceName, string $playerName): int {
         return $this->streaks[$instanceName][$playerName]['current_streak'] ?? 0;
@@ -370,7 +399,7 @@ class Main extends PluginBase implements Listener {
         return $this->streaks;
     }
     
-    private function checkStreakMilestones(string $instanceName, string $playerName): void {
+    private function checkStreakMilestones(string $instanceName, string $playerName, bool $isNewRecord = false): void {
         $streak = $this->getStreak($instanceName, $playerName);
         $player = $this->getServer()->getPlayerExact($playerName);
         $config = $this->instances[$instanceName];
@@ -380,6 +409,9 @@ class Main extends PluginBase implements Listener {
         $milestones = $config['milestones'] ?? [];
         
         if (in_array($streak, $milestones)) {
+            $event = new StreakMilestoneEvent($this, $player, $instanceName, $streak, $streak, $isNewRecord);
+            $event->call();
+            
             $message = str_replace(
                 ["{player}", "{streak}", "{instance}"], 
                 [$playerName, $streak, $config['display_name']], 
