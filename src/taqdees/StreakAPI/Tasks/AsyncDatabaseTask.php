@@ -1,5 +1,4 @@
 <?php
-
 namespace taqdees\StreakAPI\Tasks;
 
 use pocketmine\scheduler\AsyncTask;
@@ -274,10 +273,13 @@ class AsyncDatabaseTask extends AsyncTask {
     }
     
     public function onCompletion(): void {
-        $plugin = $this->getOwner();
+        $server = \pocketmine\Server::getInstance();
+        $plugin = $server->getPluginManager()->getPlugin($this->pluginName);
+        
         if ($plugin instanceof Main && $plugin->isEnabled()) {
             $result = $this->getResult();
             $plugin->handleAsyncResult($result);
         }
     }
+
 }
