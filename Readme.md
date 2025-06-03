@@ -1,4 +1,3 @@
-md
 # StreakAPI Plugin
 
 A comprehensive PocketMine-MP plugin that provides a flexible API for tracking player streaks across multiple instances. Perfect for gamemodes like KitPvP, SkyWars, or any plugin that needs to track consecutive achievements.

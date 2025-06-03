@@ -1,6 +1,6 @@
 name: StreakAPI
 main: taqdees\StreakAPI\Main
-version: 1.0.0
+version: 1.2.0
 api: 5.0.0
 author: Taqdees
 description: A streak tracking API for PocketMine-MP
