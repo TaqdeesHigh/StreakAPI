@@ -3,17 +3,25 @@
 namespace taqdees\StreakAPI;
 
 use pocketmine\utils\Config;
-use mysqli;
+use taqdees\StreakAPI\Tasks\AsyncDatabaseTask;
 
 class DatabaseManager {
     
     private $config;
-    private $connection;
     private $useDatabase;
+    private $plugin;
+    private $dbConfig;
+    private $pendingOperations = [];
+    private $batchBuffer = [];
+    private $batchSize = 50;
+    private $lastBatchTime = 0;
+    private $batchInterval = 5;
     
-    public function __construct(Config $config) {
+    public function __construct(Main $plugin, Config $config) {
+        $this->plugin = $plugin;
         $this->config = $config;
         $this->useDatabase = $config->get("use-database", false);
+        $this->dbConfig = $config->get("database", []);
         
         if ($this->useDatabase) {
             $this->initializeDatabase();
@@ -21,175 +29,199 @@ class DatabaseManager {
     }
     
     private function initializeDatabase(): void {
-        $dbConfig = $this->config->get("database", []);
-        
-        $host = $dbConfig["host"];
-        $port = $dbConfig["port"];
-        $username = $dbConfig["username"];
-        $password = $dbConfig["password"];
-        $database = $dbConfig["database"];
-        
-        try {
-            $this->connection = new mysqli($host, $username, $password, $database, $port);
-            
-            if ($this->connection->connect_error) {
-                throw new \Exception("Connection failed: " . $this->connection->connect_error);
+        if (!$this->validateDatabaseConfig()) {
+            throw new \Exception("Invalid database configuration");
+        }
+        $task = new AsyncDatabaseTask($this->dbConfig, 'create_tables', [], $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    private function validateDatabaseConfig(): bool {
+        $required = ['host', 'port', 'username', 'password', 'database'];
+        foreach ($required as $key) {
+            if (!isset($this->dbConfig[$key])) {
+                $this->plugin->getLogger()->error("Missing database config: $key");
+                return false;
             }
-            
-            $this->createTables();
-        } catch (\Exception $e) {
-            throw new \Exception("Failed to initialize database: " . $e->getMessage());
         }
+        return true;
     }
     
-    private function createTables(): void {
-        $instancesTable = "CREATE TABLE IF NOT EXISTS streak_instances (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            instance_name VARCHAR(255) UNIQUE NOT NULL,
-            display_name VARCHAR(255) NOT NULL,
-            config JSON NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )";
-        
-        $streaksTable = "CREATE TABLE IF NOT EXISTS streak_data (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            instance_name VARCHAR(255) NOT NULL,
-            player_name VARCHAR(255) NOT NULL,
-            current_streak INT DEFAULT 0,
-            highest_streak INT DEFAULT 0,
-            total_count INT DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_instance_player (instance_name, player_name),
-            FOREIGN KEY (instance_name) REFERENCES streak_instances(instance_name) ON DELETE CASCADE
-        )";
-        
-        if (!$this->connection->query($instancesTable)) {
-            throw new \Exception("Failed to create instances table: " . $this->connection->error);
-        }
-        
-        if (!$this->connection->query($streaksTable)) {
-            throw new \Exception("Failed to create streaks table: " . $this->connection->error);
-        }
+    public function isUsingDatabase(): bool {
+        return $this->useDatabase;
     }
     
-    public function saveInstance(string $instanceName, array $config): bool {
-        if (!$this->useDatabase) return false;
+    public function saveInstance(string $instanceName, array $config): void {
+        if (!$this->useDatabase) return;
         
         $displayName = $config['display_name'] ?? $instanceName;
-        $configJson = json_encode($config);
-        
-        $stmt = $this->connection->prepare("INSERT INTO streak_instances (instance_name, display_name, config) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE display_name = ?, config = ?");
-        $stmt->bind_param("sssss", $instanceName, $displayName, $configJson, $displayName, $configJson);
-        
-        $result = $stmt->execute();
-        $stmt->close();
-        
-        return $result;
-    }
-    
-    public function loadInstances(): array {
-        if (!$this->useDatabase) return [];
-        
-        $result = $this->connection->query("SELECT instance_name, config FROM streak_instances");
-        $instances = [];
-        
-        while ($row = $result->fetch_assoc()) {
-            $instances[$row['instance_name']] = json_decode($row['config'], true);
-        }
-        
-        return $instances;
-    }
-    
-    public function deleteInstance(string $instanceName): bool {
-        if (!$this->useDatabase) return false;
-        
-        $stmt = $this->connection->prepare("DELETE FROM streak_instances WHERE instance_name = ?");
-        $stmt->bind_param("s", $instanceName);
-        
-        $result = $stmt->execute();
-        $stmt->close();
-        
-        return $result;
-    }
-    
-    public function saveStreakData(string $instanceName, string $playerName, array $data): bool {
-        if (!$this->useDatabase) return false;
-        
-        $stmt = $this->connection->prepare("INSERT INTO streak_data (instance_name, player_name, current_streak, highest_streak, total_count) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE current_streak = ?, highest_streak = ?, total_count = ?");
-        $stmt->bind_param("ssiiiiiii", $instanceName, $playerName, $data['current_streak'], $data['highest_streak'], $data['total_count'], $data['current_streak'], $data['highest_streak'], $data['total_count']);
-        
-        $result = $stmt->execute();
-        $stmt->close();
-        
-        return $result;
-    }
-    
-    public function loadStreakData(): array {
-        if (!$this->useDatabase) return [];
-        
-        $result = $this->connection->query("SELECT * FROM streak_data");
-        $streaks = [];
-        
-        while ($row = $result->fetch_assoc()) {
-            $streaks[$row['instance_name']][$row['player_name']] = [
-                'current_streak' => (int)$row['current_streak'],
-                'highest_streak' => (int)$row['highest_streak'],
-                'total_count' => (int)$row['total_count'],
-                'last_updated' => strtotime($row['last_updated'])
-            ];
-        }
-        
-        return $streaks;
-    }
-    
-    public function getPlayerData(string $instanceName, string $playerName): ?array {
-        if (!$this->useDatabase) return null;
-        
-        $stmt = $this->connection->prepare("SELECT * FROM streak_data WHERE instance_name = ? AND player_name = ?");
-        $stmt->bind_param("ss", $instanceName, $playerName);
-        $stmt->execute();
-        
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
-        $stmt->close();
-        
-        if (!$row) return null;
-        
-        return [
-            'current_streak' => (int)$row['current_streak'],
-            'highest_streak' => (int)$row['highest_streak'],
-            'total_count' => (int)$row['total_count'],
-            'last_updated' => strtotime($row['last_updated'])
+        $taskData = [
+            'instance_name' => $instanceName,
+            'display_name' => $displayName,
+            'config' => $config
         ];
+        
+        $task = new AsyncDatabaseTask($this->dbConfig, 'save_instance', $taskData, $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
     }
     
-    public function getAllStreaks(string $instanceName): array {
-        if (!$this->useDatabase) return [];
-        
-        $stmt = $this->connection->prepare("SELECT * FROM streak_data WHERE instance_name = ?");
-        $stmt->bind_param("s", $instanceName);
-        $stmt->execute();
-        
-        $result = $stmt->get_result();
-        $streaks = [];
-        
-        while ($row = $result->fetch_assoc()) {
-            $streaks[$row['player_name']] = [
-                'current_streak' => (int)$row['current_streak'],
-                'highest_streak' => (int)$row['highest_streak'],
-                'total_count' => (int)$row['total_count'],
-                'last_updated' => strtotime($row['last_updated'])
-            ];
+    public function loadInstances(callable $callback = null): void {
+        if (!$this->useDatabase) {
+            if ($callback) $callback([]);
+            return;
         }
         
-        $stmt->close();
-        return $streaks;
+        $this->pendingOperations['load_instances'] = $callback;
+        $task = new AsyncDatabaseTask($this->dbConfig, 'load_instances', [], $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    public function deleteInstance(string $instanceName): void {
+        if (!$this->useDatabase) return;
+        
+        $taskData = ['instance_name' => $instanceName];
+        $task = new AsyncDatabaseTask($this->dbConfig, 'delete_instance', $taskData, $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    public function saveStreakData(string $instanceName, string $playerName, array $data): void {
+        if (!$this->useDatabase) return;
+        
+        $streakData = [
+            'instance_name' => $instanceName,
+            'player_name' => $playerName,
+            'current_streak' => $data['current_streak'],
+            'highest_streak' => $data['highest_streak'],
+            'total_count' => $data['total_count']
+        ];
+        
+        $this->batchBuffer[] = $streakData;
+        if (count($this->batchBuffer) >= $this->batchSize || 
+            (time() - $this->lastBatchTime) >= $this->batchInterval) {
+            $this->processBatch();
+        }
+    }
+    
+    private function processBatch(): void {
+        if (empty($this->batchBuffer)) return;
+        
+        $taskData = ['streaks' => $this->batchBuffer];
+        $task = new AsyncDatabaseTask($this->dbConfig, 'batch_save_streaks', $taskData, $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+        
+        $this->batchBuffer = [];
+        $this->lastBatchTime = time();
+    }
+    
+    public function loadStreakData(callable $callback = null): void {
+        if (!$this->useDatabase) {
+            if ($callback) $callback([]);
+            return;
+        }
+        
+        $this->pendingOperations['load_streaks'] = $callback;
+        $task = new AsyncDatabaseTask($this->dbConfig, 'load_streaks', [], $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    public function getPlayerData(string $instanceName, string $playerName, callable $callback = null): void {
+        if (!$this->useDatabase) {
+            if ($callback) $callback(null);
+            return;
+        }
+        
+        $taskData = [
+            'instance_name' => $instanceName,
+            'player_name' => $playerName
+        ];
+        
+        $this->pendingOperations['get_player_data_' . $instanceName . '_' . $playerName] = $callback;
+        $task = new AsyncDatabaseTask($this->dbConfig, 'get_player_data', $taskData, $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    public function getAllStreaks(string $instanceName, callable $callback = null): void {
+        if (!$this->useDatabase) {
+            if ($callback) $callback([]);
+            return;
+        }
+        
+        $taskData = ['instance_name' => $instanceName];
+        $this->pendingOperations['get_all_streaks_' . $instanceName] = $callback;
+        $task = new AsyncDatabaseTask($this->dbConfig, 'get_all_streaks', $taskData, $this->plugin->getName());
+        $this->plugin->getServer()->getAsyncPool()->submitTask($task);
+    }
+    
+    public function handleAsyncResult(array $result): void {
+        if (!$result['success']) {
+            $this->plugin->getLogger()->error("Database operation failed: " . ($result['error'] ?? 'Unknown error'));
+            return;
+        }
+        
+        $operation = $result['operation'] ?? '';
+        $data = $result['data'] ?? null;
+        
+        switch ($operation) {
+            case 'create_tables':
+                $this->plugin->getLogger()->info("Database tables created successfully");
+                break;
+                
+            case 'load_instances':
+                if (isset($this->pendingOperations['load_instances'])) {
+                    $callback = $this->pendingOperations['load_instances'];
+                    if ($callback) $callback($data);
+                    unset($this->pendingOperations['load_instances']);
+                }
+                break;
+                
+            case 'load_streaks':
+                if (isset($this->pendingOperations['load_streaks'])) {
+                    $callback = $this->pendingOperations['load_streaks'];
+                    if ($callback) $callback($data);
+                    unset($this->pendingOperations['load_streaks']);
+                }
+                break;
+                
+            case 'get_player_data':
+                foreach ($this->pendingOperations as $key => $callback) {
+                    if (strpos($key, 'get_player_data_') === 0) {
+                        if ($callback) $callback($data);
+                        unset($this->pendingOperations[$key]);
+                        break;
+                    }
+                }
+                break;
+                
+            case 'get_all_streaks':
+                foreach ($this->pendingOperations as $key => $callback) {
+                    if (strpos($key, 'get_all_streaks_') === 0) {
+                        if ($callback) $callback($data);
+                        unset($this->pendingOperations[$key]);
+                        break;
+                    }
+                }
+                break;
+                
+            case 'batch_save_streaks':
+                break;
+        }
+    }
+    
+    public function forceBatchProcess(): void {
+        $this->processBatch();
     }
     
     public function close(): void {
-        if ($this->connection) {
-            $this->connection->close();
-        }
+        $this->forceBatchProcess();
+        $this->pendingOperations = [];
+        $this->batchBuffer = [];
+    }
+    
+    public function getPendingOperationsCount(): int {
+        return count($this->pendingOperations);
+    }
+    
+    public function getBatchBufferSize(): int {
+        return count($this->batchBuffer);
     }
 }

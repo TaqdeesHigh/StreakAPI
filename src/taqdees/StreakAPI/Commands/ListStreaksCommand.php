@@ -1,19 +1,23 @@
 <?php
-
 namespace taqdees\StreakAPI\Commands;
 
 use pocketmine\command\CommandSender;
-use pocketmine\utils\TextFormat as TF;
+use pocketmine\plugin\Plugin;
+use pocketmine\plugin\PluginOwned;
 use taqdees\StreakAPI\Main;
 use taqdees\StreakAPI\Traits\StreakPluginTrait;
 
-class ListStreaksCommand {
+class ListStreaksCommand implements PluginOwned {
     use StreakPluginTrait;
     
     private $plugin;
     
     public function __construct(Main $plugin) {
         $this->plugin = $plugin;
+    }
+    
+    public function getOwningPlugin(): Plugin {
+        return $this->plugin;
     }
     
     protected function getPlugin(): Main {
