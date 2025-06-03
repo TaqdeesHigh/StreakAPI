@@ -224,4 +224,8 @@ class DatabaseManager {
     public function getBatchBufferSize(): int {
         return count($this->batchBuffer);
     }
+
+    public function getConfig(): Config {
+        return $this->config;
+    }
 }

@@ -5,6 +5,7 @@ use pocketmine\command\CommandSender;
 use pocketmine\plugin\Plugin;
 use pocketmine\plugin\PluginOwned;
 use taqdees\StreakAPI\Main;
+use pocketmine\utils\TextFormat as TF;
 use taqdees\StreakAPI\Traits\StreakPluginTrait;
 
 class ListStreaksCommand implements PluginOwned {
