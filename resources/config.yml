@@ -1,6 +1,6 @@
 # StreakAPI Configuration File
 # Set to true to use MySQL database instead of JSON files
-use-database: true
+use-database: false
 
 # Database configuration (only used if use-database is true)
 database:

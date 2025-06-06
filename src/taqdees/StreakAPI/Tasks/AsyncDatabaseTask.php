@@ -12,7 +12,7 @@ class AsyncDatabaseTask extends AsyncTask {
     private $database;
     private $port;
     private $operation;
-    private $data;
+    private $serializedData;
     private $pluginName;
     
     public function __construct(array $dbConfig, string $operation, array $data = [], string $pluginName = "") {
@@ -22,8 +22,12 @@ class AsyncDatabaseTask extends AsyncTask {
         $this->database = $dbConfig['database'];
         $this->port = $dbConfig['port'];
         $this->operation = $operation;
-        $this->data = $data;
+        $this->serializedData = serialize($data);
         $this->pluginName = $pluginName;
+    }
+
+    private function getData(): array {
+        return unserialize($this->serializedData);
     }
     
     public function onRun(): void {
@@ -31,7 +35,7 @@ class AsyncDatabaseTask extends AsyncTask {
             $connection = new \mysqli($this->host, $this->username, $this->password, $this->database, $this->port);
             
             if ($connection->connect_error) {
-                $this->setResult(['success' => false, 'error' => $connection->connect_error]);
+                $this->setResult(serialize(['success' => false, 'error' => $connection->connect_error]));
                 return;
             }
             
@@ -79,51 +83,18 @@ class AsyncDatabaseTask extends AsyncTask {
             }
             
             $connection->close();
-            $this->setResult(['success' => true, 'data' => $result, 'operation' => $this->operation]);
+            $this->setResult(serialize(['success' => true, 'data' => $result, 'operation' => $this->operation]));
             
         } catch (\Exception $e) {
-            $this->setResult(['success' => false, 'error' => $e->getMessage(), 'operation' => $this->operation]);
+            $this->setResult(serialize(['success' => false, 'error' => $e->getMessage(), 'operation' => $this->operation]));
         }
-    }
-    
-    private function createTables(\mysqli $connection): bool {
-        $instancesTable = "CREATE TABLE IF NOT EXISTS streak_instances (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            instance_name VARCHAR(255) UNIQUE NOT NULL,
-            display_name VARCHAR(255) NOT NULL,
-            config JSON NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )";
-        
-        $streaksTable = "CREATE TABLE IF NOT EXISTS streak_data (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            instance_name VARCHAR(255) NOT NULL,
-            player_name VARCHAR(255) NOT NULL,
-            current_streak INT DEFAULT 0,
-            highest_streak INT DEFAULT 0,
-            total_count INT DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_instance_player (instance_name, player_name),
-            INDEX idx_instance_name (instance_name),
-            INDEX idx_player_name (player_name)
-        )";
-        
-        if (!$connection->query($instancesTable)) {
-            throw new \Exception("Failed to create instances table: " . $connection->error);
-        }
-        
-        if (!$connection->query($streaksTable)) {
-            throw new \Exception("Failed to create streaks table: " . $connection->error);
-        }
-        
-        return true;
     }
     
     private function saveInstance(\mysqli $connection): bool {
-        $instanceName = $this->data['instance_name'];
-        $displayName = $this->data['display_name'];
-        $configJson = json_encode($this->data['config']);
+        $data = $this->getData();
+        $instanceName = $data['instance_name'];
+        $displayName = $data['display_name'];
+        $configJson = json_encode($data['config']);
         
         $stmt = $connection->prepare("INSERT INTO streak_instances (instance_name, display_name, config) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE display_name = ?, config = ?");
         $stmt->bind_param("sssss", $instanceName, $displayName, $configJson, $displayName, $configJson);
@@ -134,22 +105,9 @@ class AsyncDatabaseTask extends AsyncTask {
         return $result;
     }
     
-    private function loadInstances(\mysqli $connection): array {
-        $result = $connection->query("SELECT instance_name, config FROM streak_instances");
-        $instances = [];
-        
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $instances[$row['instance_name']] = json_decode($row['config'], true);
-            }
-            $result->free();
-        }
-        
-        return $instances;
-    }
-    
     private function deleteInstance(\mysqli $connection): bool {
-        $instanceName = $this->data['instance_name'];
+        $data = $this->getData();
+        $instanceName = $data['instance_name'];
         
         $stmt = $connection->prepare("DELETE FROM streak_instances WHERE instance_name = ?");
         $stmt->bind_param("s", $instanceName);
@@ -161,11 +119,12 @@ class AsyncDatabaseTask extends AsyncTask {
     }
     
     private function saveStreakData(\mysqli $connection): bool {
-        $instanceName = $this->data['instance_name'];
-        $playerName = $this->data['player_name'];
-        $currentStreak = $this->data['current_streak'];
-        $highestStreak = $this->data['highest_streak'];
-        $totalCount = $this->data['total_count'];
+        $data = $this->getData();
+        $instanceName = $data['instance_name'];
+        $playerName = $data['player_name'];
+        $currentStreak = $data['current_streak'];
+        $highestStreak = $data['highest_streak'];
+        $totalCount = $data['total_count'];
         
         $stmt = $connection->prepare("INSERT INTO streak_data (instance_name, player_name, current_streak, highest_streak, total_count) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE current_streak = ?, highest_streak = ?, total_count = ?");
         $stmt->bind_param("ssiiiiiii", $instanceName, $playerName, $currentStreak, $highestStreak, $totalCount, $currentStreak, $highestStreak, $totalCount);
@@ -177,12 +136,13 @@ class AsyncDatabaseTask extends AsyncTask {
     }
     
     private function batchSaveStreaks(\mysqli $connection): bool {
+        $data = $this->getData();
         $connection->autocommit(false);
         
         try {
             $stmt = $connection->prepare("INSERT INTO streak_data (instance_name, player_name, current_streak, highest_streak, total_count) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE current_streak = ?, highest_streak = ?, total_count = ?");
             
-            foreach ($this->data['streaks'] as $streakData) {
+            foreach ($data['streaks'] as $streakData) {
                 $stmt->bind_param("ssiiiiiii", 
                     $streakData['instance_name'], 
                     $streakData['player_name'], 
@@ -208,28 +168,10 @@ class AsyncDatabaseTask extends AsyncTask {
         }
     }
     
-    private function loadStreakData(\mysqli $connection): array {
-        $result = $connection->query("SELECT * FROM streak_data");
-        $streaks = [];
-        
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $streaks[$row['instance_name']][$row['player_name']] = [
-                    'current_streak' => (int)$row['current_streak'],
-                    'highest_streak' => (int)$row['highest_streak'],
-                    'total_count' => (int)$row['total_count'],
-                    'last_updated' => strtotime($row['last_updated'])
-                ];
-            }
-            $result->free();
-        }
-        
-        return $streaks;
-    }
-    
     private function getPlayerData(\mysqli $connection): ?array {
-        $instanceName = $this->data['instance_name'];
-        $playerName = $this->data['player_name'];
+        $data = $this->getData();
+        $instanceName = $data['instance_name'];
+        $playerName = $data['player_name'];
         
         $stmt = $connection->prepare("SELECT * FROM streak_data WHERE instance_name = ? AND player_name = ?");
         $stmt->bind_param("ss", $instanceName, $playerName);
@@ -250,7 +192,8 @@ class AsyncDatabaseTask extends AsyncTask {
     }
     
     private function getAllStreaks(\mysqli $connection): array {
-        $instanceName = $this->data['instance_name'];
+        $data = $this->getData();
+        $instanceName = $data['instance_name'];
         
         $stmt = $connection->prepare("SELECT * FROM streak_data WHERE instance_name = ?");
         $stmt->bind_param("s", $instanceName);
@@ -277,9 +220,8 @@ class AsyncDatabaseTask extends AsyncTask {
         $plugin = $server->getPluginManager()->getPlugin($this->pluginName);
         
         if ($plugin instanceof Main && $plugin->isEnabled()) {
-            $result = $this->getResult();
+            $result = unserialize($this->getResult());
             $plugin->handleAsyncResult($result);
         }
     }
-
 }

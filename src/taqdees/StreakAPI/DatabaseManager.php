@@ -75,7 +75,7 @@ class DatabaseManager {
         $task = new AsyncDatabaseTask($this->dbConfig, 'load_instances', [], $this->plugin->getName());
         $this->plugin->getServer()->getAsyncPool()->submitTask($task);
     }
-    
+
     public function deleteInstance(string $instanceName): void {
         if (!$this->useDatabase) return;
         
@@ -152,6 +152,7 @@ class DatabaseManager {
         $this->plugin->getServer()->getAsyncPool()->submitTask($task);
     }
     
+
     public function handleAsyncResult(array $result): void {
         if (!$result['success']) {
             $this->plugin->getLogger()->error("Database operation failed: " . ($result['error'] ?? 'Unknown error'));
@@ -159,7 +160,7 @@ class DatabaseManager {
         }
         
         $operation = $result['operation'] ?? '';
-        $data = $result['data'] ?? null;
+        $data = $result['data'] ?? [];
         
         switch ($operation) {
             case 'create_tables':
@@ -169,7 +170,7 @@ class DatabaseManager {
             case 'load_instances':
                 if (isset($this->pendingOperations['load_instances'])) {
                     $callback = $this->pendingOperations['load_instances'];
-                    if ($callback) $callback($data);
+                    if ($callback) $callback($data ?? []);
                     unset($this->pendingOperations['load_instances']);
                 }
                 break;
@@ -177,7 +178,7 @@ class DatabaseManager {
             case 'load_streaks':
                 if (isset($this->pendingOperations['load_streaks'])) {
                     $callback = $this->pendingOperations['load_streaks'];
-                    if ($callback) $callback($data);
+                    if ($callback) $callback($data ?? []);
                     unset($this->pendingOperations['load_streaks']);
                 }
                 break;
@@ -195,7 +196,7 @@ class DatabaseManager {
             case 'get_all_streaks':
                 foreach ($this->pendingOperations as $key => $callback) {
                     if (strpos($key, 'get_all_streaks_') === 0) {
-                        if ($callback) $callback($data);
+                        if ($callback) $callback($data ?? []);
                         unset($this->pendingOperations[$key]);
                         break;
                     }

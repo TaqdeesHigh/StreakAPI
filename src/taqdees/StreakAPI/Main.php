@@ -31,12 +31,14 @@ class Main extends PluginBase implements Listener {
     private $databaseManager;
     private $useDatabase;
     private $commands = [];
-    
+        
     public function onEnable(): void {
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
         $this->saveDefaultConfig();
         $this->config = $this->getConfig();
         $this->useDatabase = $this->config->get("use-database", false);
+        
+        $this->initializeArrays();
         
         $this->initializeDatabase();
         $this->streakAPI = new StreakAPI($this);
@@ -103,18 +105,24 @@ class Main extends PluginBase implements Listener {
     
     private function loadStreakData(): void {
         if ($this->useDatabase && $this->databaseManager) {
-            $this->streaks = $this->databaseManager->loadStreakData();
+            $this->databaseManager->loadStreakData(function($data) {
+                $this->streaks = $data ?? [];
+            });
         } else {
             $data = new Config($this->getDataFolder() . "streaks.json", Config::JSON);
-            $this->streaks = $data->getAll();
+            $this->streaks = $data->getAll() ?? [];
         }
     }
-    
+        
     public function saveStreakData(): void {
         if ($this->useDatabase && $this->databaseManager) {
-            foreach ($this->streaks as $instanceName => $instanceData) {
-                foreach ($instanceData as $playerName => $playerData) {
-                    $this->databaseManager->saveStreakData($instanceName, $playerName, $playerData);
+            if (is_array($this->streaks)) {
+                foreach ($this->streaks as $instanceName => $instanceData) {
+                    if (is_array($instanceData)) {
+                        foreach ($instanceData as $playerName => $playerData) {
+                            $this->databaseManager->saveStreakData($instanceName, $playerName, $playerData);
+                        }
+                    }
                 }
             }
         } else {
@@ -122,20 +130,23 @@ class Main extends PluginBase implements Listener {
                 mkdir($this->getDataFolder(), 0777, true);
             }
             $data = new Config($this->getDataFolder() . "streaks.json", Config::JSON);
-            $data->setAll($this->streaks);
+            $data->setAll($this->streaks ?? []);
             $data->save();
         }
     }
+
     
     private function loadInstances(): void {
         if ($this->useDatabase && $this->databaseManager) {
-            $this->instances = $this->databaseManager->loadInstances();
+            $this->databaseManager->loadInstances(function($data) {
+                $this->instances = $data ?? [];
+            });
         } else {
             $data = new Config($this->getDataFolder() . "instances.json", Config::JSON);
-            $this->instances = $data->getAll();
+            $this->instances = $data->getAll() ?? [];
         }
     }
-    
+        
     public function saveInstances(): void {
         if ($this->useDatabase && $this->databaseManager) {
             return;
@@ -144,16 +155,23 @@ class Main extends PluginBase implements Listener {
                 mkdir($this->getDataFolder(), 0777, true);
             }
             $data = new Config($this->getDataFolder() . "instances.json", Config::JSON);
-            $data->setAll($this->instances);
+            $data->setAll($this->instances ?? []);
             $data->save();
         }
     }
-    
+
     public function onPlayerJoin(PlayerJoinEvent $event): void {
         $player = $event->getPlayer();
         $name = $player->getName();
+        if (!is_array($this->instances)) {
+            $this->instances = [];
+        }
         
         foreach ($this->instances as $instanceName => $config) {
+            if (!isset($this->streaks[$instanceName])) {
+                $this->streaks[$instanceName] = [];
+            }
+            
             if (!isset($this->streaks[$instanceName][$name])) {
                 $this->streaks[$instanceName][$name] = [
                     'current_streak' => 0,
@@ -397,6 +415,15 @@ class Main extends PluginBase implements Listener {
         }
         
         return [];
+    }
+
+    private function initializeArrays(): void {
+        if (!is_array($this->streaks)) {
+            $this->streaks = [];
+        }
+        if (!is_array($this->instances)) {
+            $this->instances = [];
+        }
     }
     
     public function getAllInstancesData(): array {
