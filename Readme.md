@@ -372,9 +372,3 @@ class MyListener implements Listener {
 ## License
 
 This plugin is released under the MIT License. See LICENSE file for details.
-
----
-
-**Version:** 1.0.0
-**Compatible with:** PocketMine-MP 5.0+
-**PHP Version:** 8.0+
