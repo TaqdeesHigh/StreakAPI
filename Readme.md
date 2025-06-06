@@ -244,7 +244,7 @@ $config = [
 
 ### JSON Files (Default)
 
-*   Stored in `plugins/StreakAPI/streaks.json` and `instances.json`
+*   Stored in `plugin_data/StreakAPI/streaks.json` and `instances.json` (these files will be created when an instance gets created by the plugins API or by the command.)
 *   No additional setup required
 *   Good for smaller servers
 
