@@ -59,7 +59,6 @@ class Main extends PluginBase implements Listener {
         if ($this->useDatabase) {
             try {
                 $this->databaseManager = new DatabaseManager($this, $this->config);
-                $this->getLogger()->info(TF::GREEN . "Database manager initialized!");
             } catch (\Exception $e) {
                 $this->getLogger()->error(TF::RED . "Failed to initialize database: " . $e->getMessage());
                 $this->getLogger()->info(TF::YELLOW . "Falling back to JSON file storage...");
