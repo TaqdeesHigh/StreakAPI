@@ -110,7 +110,7 @@ class Main extends PluginBase implements Listener {
             });
         } else {
             $data = new Config($this->getDataFolder() . "streaks.json", Config::JSON);
-            $this->streaks = $data->getAll() ?? [];
+            $this->streaks = $data->getAll();
         }
     }
         
@@ -143,7 +143,7 @@ class Main extends PluginBase implements Listener {
             });
         } else {
             $data = new Config($this->getDataFolder() . "instances.json", Config::JSON);
-            $this->instances = $data->getAll() ?? [];
+            $this->instances = $data->getAll();
         }
     }
         

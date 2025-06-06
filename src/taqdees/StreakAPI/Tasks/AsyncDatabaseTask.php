@@ -89,6 +89,70 @@ class AsyncDatabaseTask extends AsyncTask {
             $this->setResult(serialize(['success' => false, 'error' => $e->getMessage(), 'operation' => $this->operation]));
         }
     }
+
+    private function createTables(\mysqli $connection): bool {
+        $instancesTable = "CREATE TABLE IF NOT EXISTS streak_instances (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            instance_name VARCHAR(255) UNIQUE NOT NULL,
+            display_name VARCHAR(255) NOT NULL,
+            config JSON NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )";
+        
+        $streaksTable = "CREATE TABLE IF NOT EXISTS streak_data (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            instance_name VARCHAR(255) NOT NULL,
+            player_name VARCHAR(255) NOT NULL,
+            current_streak INT DEFAULT 0,
+            highest_streak INT DEFAULT 0,
+            total_count INT DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_instance_player (instance_name, player_name),
+            INDEX idx_instance_name (instance_name),
+            INDEX idx_player_name (player_name)
+        )";
+        
+        if (!$connection->query($instancesTable)) {
+            throw new \Exception("Failed to create instances table: " . $connection->error);
+        }
+        
+        if (!$connection->query($streaksTable)) {
+            throw new \Exception("Failed to create streaks table: " . $connection->error);
+        }
+        
+        return true;
+    }
+    private function loadInstances(\mysqli $connection): array {
+        $result = $connection->query("SELECT instance_name, config FROM streak_instances");
+        $instances = [];
+        
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $instances[$row['instance_name']] = json_decode($row['config'], true);
+            }
+            $result->free();
+        }
+        
+        return $instances;
+    }
+
+    private function loadStreakData(\mysqli $connection): array {
+        $result = $connection->query("SELECT * FROM streak_data");
+        $streaks = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $streaks[$row['instance_name']][$row['player_name']] = [
+                    'current_streak' => (int)$row['current_streak'],
+                    'highest_streak' => (int)$row['highest_streak'],
+                    'total_count' => (int)$row['total_count'],
+                    'last_updated' => strtotime($row['last_updated'])
+                ];
+            }
+            $result->free();
+        }
+        return $streaks;
+    }
     
     private function saveInstance(\mysqli $connection): bool {
         $data = $this->getData();
